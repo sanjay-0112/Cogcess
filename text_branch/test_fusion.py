@@ -579,6 +579,32 @@ r2 = 1 - (
     ss_res / ss_tot
 )
 
+# ============================================================
+# SAVE TEST PREDICTIONS
+# ============================================================
+
+import os
+
+os.makedirs("data/processed", exist_ok=True)
+
+results_df = pd.DataFrame({
+    "actual_grade": actuals,
+    "predicted_grade": predictions,
+    "absolute_error": np.abs(
+        predictions - actuals
+    )
+})
+
+results_df.to_csv(
+    "data/processed/fusion_test_predictions.csv",
+    index=False
+)
+
+print(
+    "\nSaved test predictions to: "
+    "data/processed/fusion_test_predictions.csv"
+)
+
 
 print("\n" + "=" * 60)
 print("FINAL COGCESS FUSION RESULTS")
