@@ -14,6 +14,7 @@ import io
 import re
 import sys
 import contextlib
+import os
 
 import streamlit as st  # pyright: ignore[reportMissingImports]
 
@@ -45,6 +46,78 @@ def load_cogcess():
         from text_branch import inference_final
     return inference_final
 
+
+
+def get_gemini_client():
+    """Create a Gemini client using a Streamlit secret or environment variable."""
+    try:
+        api_key = st.secrets.get("GEMINI_API_KEY", "")
+    except Exception:
+        api_key = ""
+    api_key = api_key or os.getenv("GEMINI_API_KEY", "")
+    if not api_key:
+        raise RuntimeError(
+            "GEMINI_API_KEY is not configured. Add it to Streamlit Cloud "
+            "Secrets or set it as an environment variable."
+        )
+    from google import genai  # pyright: ignore[reportMissingImports]
+    return genai.Client(api_key=api_key)
+
+
+def simplify_text(text, level="Moderate"):
+    """Rewrite text for cognitive accessibility while preserving its meaning."""
+    client = get_gemini_client()
+
+    level_instructions = {
+        "Mild": (
+            "Make small changes only. Replace unnecessarily difficult words and "
+            "slightly simplify sentence structure while staying close to the original."
+        ),
+        "Moderate": (
+            "Use simpler vocabulary and shorter, clearer sentences. Break long sentences "
+            "into smaller ones when useful. Preserve all important information."
+        ),
+        "High": (
+            "Use very simple everyday vocabulary, short sentences, clear structure, and "
+            "direct wording. Break complex ideas into small steps. Do not remove important facts."
+        ),
+    }[level]
+
+    prompt = f"""You are Cogcess, an AI assistant for cognitive accessibility.
+
+Rewrite the following text so it is easier for a person with cognitive reading difficulties to understand.
+
+Simplification level: {level}
+Instructions: {level_instructions}
+
+Strict rules:
+- Preserve the original meaning, facts, numbers, names, dates, and important details.
+- Do not invent information or add explanations that are not present in the source.
+- Prefer common, concrete words over rare or technical words when the meaning allows it.
+- Keep sentences short and direct.
+- Use bullet points or short sections when that makes the information easier to follow.
+- Preserve headings and the overall logical order when possible.
+- Do not mention that you are simplifying the text.
+- Return ONLY the rewritten text, with no preamble or commentary.
+
+TEXT TO SIMPLIFY:
+{text}
+"""
+
+    from google.genai import types  # pyright: ignore[reportMissingImports]
+    response = client.models.generate_content(
+        model="gemini-3.8-flash",
+        contents=prompt,
+        config=types.GenerateContentConfig(
+            temperature=0.2,
+            max_output_tokens=8192,
+        ),
+    )
+
+    simplified = (response.text or "").strip()
+    if not simplified:
+        raise RuntimeError("Gemini returned an empty response.")
+    return simplified
 
 def run_cogcess(text):
     """Run analyze_text, capture its printed report, pull out key numbers."""
@@ -412,6 +485,74 @@ with tab_one:
                 result = safe_run(text)
             if result:
                 show_result(result)
+
+with tab_simplify:
+    st.markdown("&nbsp;", unsafe_allow_html=True)
+    st.write("Rewrite difficult text into a clearer, more accessible version using AI while preserving its meaning.")
+
+    uploaded_s = st.file_uploader("Upload a .txt or .pdf file (optional)", type=["txt", "pdf"], key="simplify_upload")
+    typed_s = st.text_area(
+        "Or paste text here",
+        height=220,
+        key="simplify_typed",
+        placeholder="Paste the text you want Cogcess to simplify...",
+    )
+    level = st.selectbox(
+        "Simplification level",
+        ["Mild", "Moderate", "High"],
+        index=1,
+        help="Mild stays close to the original. High uses shorter sentences and simpler vocabulary.",
+    )
+    word_count_caption(typed_s)
+
+    if st.button("Simplify with Cogcess", type="primary", key="simplify_button"):
+        try:
+            text = read_upload(uploaded_s) if uploaded_s is not None else typed_s
+        except Exception as exc:  # noqa: BLE001
+            st.error(f"That file could not be read. Try a different file. Details: {exc}")
+            text = ""
+
+        text, cut = clean_text(text)
+        if not text.strip():
+            st.warning("Paste some text or upload a file to simplify.")
+        else:
+            if cut:
+                st.info(f"Your text is long, so only the first {MAX_WORDS:,} words were sent for simplification.")
+            try:
+                with st.spinner("Simplifying with Cogcess AI..."):
+                    simplified = simplify_text(text, level)
+                st.success("Simplified version generated.")
+
+                left, right = st.columns(2, gap="large")
+                with left:
+                    st.subheader("Original")
+                    st.markdown(text)
+                with right:
+                    st.subheader("Cogcess simplified")
+                    st.markdown(simplified)
+
+                st.download_button(
+                    "Download simplified text",
+                    data=simplified,
+                    file_name="cogcess_simplified.txt",
+                    mime="text/plain",
+                )
+
+                st.markdown("### Readability improvement")
+                with st.spinner("Checking the simplified version with the Cogcess analysis engine..."):
+                    original_result = safe_run(text)
+                    simplified_result = safe_run(clean_text(simplified)[0])
+                if original_result and simplified_result:
+                    show_change(original_result, simplified_result)
+                    left, right = st.columns(2, gap="large")
+                    with left:
+                        st.subheader("Before")
+                        show_result(original_result)
+                    with right:
+                        st.subheader("After")
+                        show_result(simplified_result)
+            except Exception as exc:  # noqa: BLE001
+                st.error(f"Simplification failed. {exc}")
 
 with tab_compare:
     st.markdown("&nbsp;", unsafe_allow_html=True)
