@@ -19,7 +19,6 @@ import time
 
 import streamlit as st  # pyright: ignore[reportMissingImports]
 
-MAX_WORDS = 1000  # keep the demo fast; longer text is cut to this many words
 MAX_GRADE_SCALE = 16  # the grade ruler runs from 0 to this value
 
 SAMPLES = {
@@ -189,9 +188,9 @@ def band(grade):
 
 
 def clean_text(text):
-    words = text.split()
-    cut = len(words) > MAX_WORDS
-    return " ".join(words[:MAX_WORDS]), cut
+    # No arbitrary application-level word limit.
+    # Very large inputs can still be limited by the underlying AI/model APIs.
+    return text, False
 
 
 def read_upload(uploaded):
@@ -458,10 +457,7 @@ def set_sample(key, text):
 
 def word_count_caption(text):
     n = len(text.split())
-    note = f"{n:,} words"
-    if n > MAX_WORDS:
-        note += f" (only the first {MAX_WORDS:,} will be analyzed)"
-    st.caption(note)
+    st.caption(f"{n:,} words")
 
 
 # ------------------------------------------------------------
@@ -482,10 +478,11 @@ with st.sidebar:
     st.markdown("#### Try an example")
     st.button("Load dense policy text", on_click=set_sample, args=("typed", SAMPLES["Dense policy text"]), use_container_width=True)
     st.button("Load plain-language text", on_click=set_sample, args=("typed", SAMPLES["Plain-language version"]), use_container_width=True)
-    st.markdown("#### Limits")
+    st.markdown("#### Notes")
     st.caption(
-        f"Texts longer than {MAX_WORDS:,} words are cut to keep the demo fast. "
-        "Easy, Medium and Hard bands are demo thresholds and are not scientifically validated."
+        "There is no fixed word limit in Cogcess. Very large documents may still be limited "
+        "by the AI/model APIs or take longer to process. Easy, Medium and Hard bands are "
+        "demo thresholds and are not scientifically validated."
     )
 
 st.markdown(
@@ -514,8 +511,6 @@ with tab_one:
         if not text.strip():
             st.warning("Paste some text or upload a file to analyze.")
         else:
-            if cut:
-                st.info(f"Your text is long, so only the first {MAX_WORDS:,} words were analyzed.")
             with st.spinner("Analyzing. The first run loads the models and can take a while..."):
                 result = safe_run(text)
             if result:
@@ -551,8 +546,6 @@ with tab_simplify:
         if not text.strip():
             st.warning("Paste some text or upload a file to simplify.")
         else:
-            if cut:
-                st.info(f"Your text is long, so only the first {MAX_WORDS:,} words were sent for simplification.")
             try:
                 with st.spinner("Simplifying with Cogcess AI..."):
                     simplified = simplify_text(text, level)
