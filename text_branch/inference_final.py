@@ -8,6 +8,11 @@ import joblib
 
 from sentence_transformers import SentenceTransformer
 
+try:
+    from text_branch.lexical_scorer import score_text as score_word_difficulty
+except ImportError:
+    from lexical_scorer import score_text as score_word_difficulty
+
 
 # ============================================================
 # PATHS
@@ -679,6 +684,23 @@ def analyze_text(text):
 
 
     # ========================================================
+    # LEXICAL (DISPLAY) - frequency-based scorer
+    # --------------------------------------------------------
+    # The legacy Mendeley model above collapsed to ~5/100 for every
+    # text, so it is NOT shown to the user any more. It is still
+    # computed because the fusion model was trained on its outputs
+    # (it contributes almost nothing: ablating it moves R2 by ~0.001).
+    # ========================================================
+
+    lex = score_word_difficulty(text)
+
+    if lex is None:
+        lex = {
+            "mean": 0.0, "median": 0.0, "p90": 0.0, "max": 0.0,
+            "difficult_ratio": 0.0, "hardest": [], "unseen_words": 0,
+        }
+
+    # ========================================================
     # FUSION
     # ========================================================
 
@@ -760,27 +782,40 @@ def analyze_text(text):
 
     print(
         f"Mean difficulty: "
-        f"{lexical_mean:.2f}/100"
+        f"{lex['mean']:.2f}/100"
     )
 
     print(
         f"Median difficulty: "
-        f"{lexical_median:.2f}/100"
+        f"{lex['median']:.2f}/100"
     )
 
     print(
         f"90th percentile: "
-        f"{lexical_p90:.2f}/100"
+        f"{lex['p90']:.2f}/100"
     )
 
     print(
         f"Maximum difficulty: "
-        f"{lexical_max:.2f}/100"
+        f"{lex['max']:.2f}/100"
     )
 
     print(
         f"Difficult word ratio: "
-        f"{difficult_ratio * 100:.2f}%"
+        f"{lex['difficult_ratio'] * 100:.2f}%"
+    )
+
+    if lex["hardest"]:
+        print(
+            "Hardest words: "
+            + ", ".join(
+                f"{w} ({sc:.0f})" for w, sc in lex["hardest"]
+            )
+        )
+
+    print(
+        f"Words missing from frequency list: "
+        f"{lex['unseen_words']}"
     )
 
     if lexical is not None:
@@ -810,6 +845,13 @@ def analyze_text(text):
 
 
     print("\n" + "=" * 60)
+
+    return {
+        "fused_grade": final_grade,
+        "readability_grade": readability_prediction,
+        "cefr": predicted_cefr,
+        "lexical": lex,
+    }
 
 
 # ============================================================
