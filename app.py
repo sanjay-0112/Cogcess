@@ -83,6 +83,11 @@ def simplify_text(text, level="Moderate"):
     client = get_gemini_client()
 
     level_instructions = {
+        "Easy": (
+            "Make the text very easy to understand. Use very common everyday words, "
+            "very short sentences, direct wording, and simple sentence structures. "
+            "Break complex ideas into small, clear steps. Keep all important facts and details."
+        ),
         "Mild": (
             "Make small changes only. Replace unnecessarily difficult words and "
             "slightly simplify sentence structure while staying close to the original."
@@ -91,7 +96,7 @@ def simplify_text(text, level="Moderate"):
             "Use simpler vocabulary and shorter, clearer sentences. Break long sentences "
             "into smaller ones when useful. Preserve all important information."
         ),
-        "High": (
+        "Hard": (
             "Use very simple everyday vocabulary, short sentences, clear structure, and "
             "direct wording. Break complex ideas into small steps. Do not remove important facts."
         ),
@@ -529,9 +534,9 @@ with tab_simplify:
     )
     level = st.selectbox(
         "Simplification level",
-        ["Mild", "Moderate", "High"],
-        index=1,
-        help="Mild stays close to the original. High uses shorter sentences and simpler vocabulary.",
+        ["Easy", "Mild", "Moderate", "Hard"],
+        index=2,
+        help="Easy uses very simple language. Mild stays close to the original. Hard uses the simplest wording and shortest sentences.",
     )
     word_count_caption(typed_s)
 
