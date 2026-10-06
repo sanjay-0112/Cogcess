@@ -1,7 +1,10 @@
-datasets
 pandas
 numpy
 scikit-learn
 textstat
 spacy
 torch
+sentence-transformers
+joblib
+nltk
+wordfreq
