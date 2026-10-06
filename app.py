@@ -15,6 +15,7 @@ import re
 import sys
 import contextlib
 import os
+import time
 
 import streamlit as st  # pyright: ignore[reportMissingImports]
 
@@ -49,7 +50,7 @@ def load_cogcess():
 
 
 def get_gemini_client():
-    """Create a Gemini client using a Streamlit secret or environment variable."""
+    """Create a fast Gemini client with automatic SDK retries disabled."""
     try:
         api_key = st.secrets.get("GEMINI_API_KEY", "")
     except Exception:
@@ -60,8 +61,21 @@ def get_gemini_client():
             "GEMINI_API_KEY is not configured. Add it to Streamlit Cloud "
             "Secrets or set it as an environment variable."
         )
+
     from google import genai  # pyright: ignore[reportMissingImports]
-    return genai.Client(api_key=api_key)
+    from google.genai import types  # pyright: ignore[reportMissingImports]
+
+    # Keep transient failures from causing the SDK to sit through several
+    # long automatic retries. The simplify feature handles one short retry
+    # itself below.
+    retry_options = types.HttpRetryOptions(
+        attempts=1,
+        http_status_codes=[429, 500, 502, 503, 504],
+    )
+    return genai.Client(
+        api_key=api_key,
+        http_options=types.HttpOptions(retry_options=retry_options),
+    )
 
 
 def simplify_text(text, level="Moderate"):
@@ -105,19 +119,35 @@ TEXT TO SIMPLIFY:
 """
 
     from google.genai import types  # pyright: ignore[reportMissingImports]
-    response = client.models.generate_content(
-        model="gemini-3.8-flash",
-        contents=prompt,
-        config=types.GenerateContentConfig(
-            temperature=0.2,
-            max_output_tokens=8192,
-        ),
+
+    config = types.GenerateContentConfig(
+        temperature=0.2,
+        max_output_tokens=4096,
     )
 
-    simplified = (response.text or "").strip()
-    if not simplified:
-        raise RuntimeError("Gemini returned an empty response.")
-    return simplified
+    # Flash-Lite is designed for fast, cost-efficient high-volume tasks.
+    # One immediate retry handles a temporary 503/429 without making the
+    # user wait through the SDK's longer automatic retry sequence.
+    for attempt in range(2):
+        try:
+            response = client.models.generate_content(
+                model="gemini-3.1-flash-lite",
+                contents=prompt,
+                config=config,
+            )
+            simplified = (response.text or "").strip()
+            if not simplified:
+                raise RuntimeError("Gemini returned an empty response.")
+            return simplified
+        except Exception as exc:
+            error_text = str(exc)
+            is_transient = any(
+                marker in error_text for marker in ("503", "UNAVAILABLE", "429", "RESOURCE_EXHAUSTED")
+            )
+            if attempt == 0 and is_transient:
+                time.sleep(1.0)
+                continue
+            raise
 
 def run_cogcess(text):
     """Run analyze_text, capture its printed report, pull out key numbers."""
