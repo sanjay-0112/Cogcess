@@ -461,7 +461,7 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-tab_one, tab_compare = st.tabs(["Analyze text", "Compare two texts"])
+tab_one, tab_simplify, tab_compare = st.tabs(["Analyze text", "Simplify text", "Compare two texts"])
 
 with tab_one:
     st.markdown("&nbsp;", unsafe_allow_html=True)
