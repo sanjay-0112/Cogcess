@@ -15,7 +15,7 @@ import re
 import sys
 import contextlib
 
-import streamlit as st
+import streamlit as st  # pyright: ignore[reportMissingImports]
 
 MAX_WORDS = 1000  # keep the demo fast; longer text is cut to this many words
 
@@ -27,7 +27,7 @@ MAX_WORDS = 1000  # keep the demo fast; longer text is cut to this many words
 def load_cogcess():
     sys.path.insert(0, "text_branch")
     with contextlib.redirect_stdout(io.StringIO()):
-        import inference_final
+        from text_branch import inference_final
     return inference_final
 
 
@@ -75,7 +75,7 @@ def read_upload(uploaded):
     if uploaded is None:
         return ""
     if uploaded.name.lower().endswith(".pdf"):
-        from pypdf import PdfReader
+        from pypdf import PdfReader  # pyright: ignore[reportMissingImports]
 
         reader = PdfReader(uploaded)
         return "\n".join((page.extract_text() or "") for page in reader.pages)
